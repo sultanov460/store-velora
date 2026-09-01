@@ -3,6 +3,11 @@
 // stable version for this project update (August 2026).
 export const SHOPIFY_API_VERSION = "2026-07";
 
+// The shared Shopify store contains products for multiple storefronts.
+// This collection is the authoritative boundary for every Velora
+// catalog read; never fall back to Shopify's store-wide product list.
+export const VELORA_COLLECTION_HANDLE = "velora";
+
 // Velora currently targets the United States as its primary storefront
 // context. Keeping this configurable makes it easy to introduce proper
 // country detection/market routing later without rewriting the data layer.

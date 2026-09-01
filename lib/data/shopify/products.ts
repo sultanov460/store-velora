@@ -1,8 +1,14 @@
 import { shopifyFetch } from "./client";
-import { GET_PRODUCT_BY_HANDLE, GET_ALL_PRODUCTS, GET_ALL_PRODUCT_CARDS, GET_ALL_PRODUCT_HANDLES, GET_COLLECTION_BY_HANDLE } from "./queries";
+import {
+  GET_PRODUCT_BY_HANDLE,
+  GET_COLLECTION_PRODUCTS,
+  GET_COLLECTION_PRODUCT_CARDS,
+  GET_COLLECTION_PRODUCT_HANDLES,
+  GET_COLLECTION_BY_HANDLE,
+} from "./queries";
 import { getValidDeliveryRange, getValidProcessingRange, parseMetafieldNumber } from "@/lib/utils/shipping";
 import type { Product, ProductVariant, ProductSpec, ShippingEstimate } from "@/lib/types/product";
-import { SHOPIFY_COUNTRY_CODE } from "./config";
+import { SHOPIFY_COUNTRY_CODE, VELORA_COLLECTION_HANDLE } from "./config";
 import { getCustomerFacingProductTitle } from "@/lib/utils/product";
 
 type ShopifyMoney = { amount: string; currencyCode: string };
@@ -308,26 +314,41 @@ function mapProductCard(p: ShopifyProductCardNode): Product {
 }
 
 export async function getProductByHandle(handle: string): Promise<Product | undefined> {
-  const data = await shopifyFetch<{ product: ShopifyProductNode | null }>(GET_PRODUCT_BY_HANDLE, { handle, country: SHOPIFY_COUNTRY_CODE });
-  return data.product ? mapProduct(data.product) : undefined;
+  const data = await shopifyFetch<{
+    product: (ShopifyProductNode & { collections: { nodes: { id: string }[] } }) | null;
+    catalogCollection: { id: string } | null;
+  }>(GET_PRODUCT_BY_HANDLE, {
+    handle,
+    collectionHandle: VELORA_COLLECTION_HANDLE,
+    country: SHOPIFY_COUNTRY_CODE,
+  });
+
+  if (!data.product || !data.catalogCollection) return undefined;
+  const belongsToVelora = data.product.collections.nodes.some(
+    (collection) => collection.id === data.catalogCollection?.id
+  );
+  return belongsToVelora ? mapProduct(data.product) : undefined;
 }
 
-// Full detail for every result — see GET_ALL_PRODUCTS in queries.ts for
-// why (only getHeroProduct uses this; grids use getAllProductCards).
+// Full detail for the Velora collection only (used by getHeroProduct).
 export async function getAllProducts(first = 50): Promise<Product[]> {
   const safeFirst = Math.min(Math.max(first, 1), 100);
-  const data = await shopifyFetch<{ products: { nodes: ShopifyProductNode[] } }>(GET_ALL_PRODUCTS, { first: safeFirst, country: SHOPIFY_COUNTRY_CODE });
-  return data.products.nodes.map(mapProduct);
+  const data = await shopifyFetch<{ collection: { products: { nodes: ShopifyProductNode[] } } | null }>(
+    GET_COLLECTION_PRODUCTS,
+    { handle: VELORA_COLLECTION_HANDLE, first: safeFirst, country: SHOPIFY_COUNTRY_CODE }
+  );
+  return data.collection?.products.nodes.map(mapProduct) ?? [];
 }
 
-// Card-weight product list for grids (related/discovery products).
+// Card-weight Velora collection list for grids and related products.
 export async function getAllProductCards(first = 50): Promise<Product[]> {
   const safeFirst = Math.min(Math.max(first, 1), 100);
-  const data = await shopifyFetch<{ products: { nodes: ShopifyProductCardNode[] } }>(GET_ALL_PRODUCT_CARDS, {
+  const data = await shopifyFetch<{ collection: { products: { nodes: ShopifyProductCardNode[] } } | null }>(GET_COLLECTION_PRODUCT_CARDS, {
+    handle: VELORA_COLLECTION_HANDLE,
     first: safeFirst,
     country: SHOPIFY_COUNTRY_CODE,
   });
-  return data.products.nodes.map(mapProductCard);
+  return data.collection?.products.nodes.map(mapProductCard) ?? [];
 }
 
 export async function getCollectionByHandle(handle: string, first = 50) {
@@ -347,12 +368,13 @@ export async function getCollectionByHandle(handle: string, first = 50) {
   };
 }
 
-// Sitemap-only: handle + real Shopify updatedAt, nothing else.
+// Sitemap-only: Velora collection handle + real Shopify updatedAt.
 export async function getAllProductHandles(first = 100): Promise<{ handle: string; updatedAt?: string }[]> {
   const safeFirst = Math.min(Math.max(first, 1), 100);
-  const data = await shopifyFetch<{ products: { nodes: { handle: string; updatedAt: string }[] } }>(GET_ALL_PRODUCT_HANDLES, {
+  const data = await shopifyFetch<{ collection: { products: { nodes: { handle: string; updatedAt: string }[] } } | null }>(GET_COLLECTION_PRODUCT_HANDLES, {
+    handle: VELORA_COLLECTION_HANDLE,
     first: safeFirst,
     country: SHOPIFY_COUNTRY_CODE,
   });
-  return data.products.nodes.map((n) => ({ handle: n.handle, updatedAt: n.updatedAt }));
+  return data.collection?.products.nodes.map((n) => ({ handle: n.handle, updatedAt: n.updatedAt })) ?? [];
 }
