@@ -15,7 +15,7 @@ import { getSiteUrl } from "@/lib/utils/site";
 export async function generateMetadata({ params }: { params: Promise<{ handle: string }> }): Promise<Metadata> {
   const { handle } = await params;
   const product = await getProductByHandle(handle);
-  if (!product) return {};
+  if (!product) notFound();
   return {
     title: product.title,
     description: product.tagline ?? product.description.slice(0, 155),
